@@ -1,0 +1,30 @@
+# Backend dependencies
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-dotenv>=1.0.0
+
+# Auth
+bcrypt>=4.1.2
+python-jose[cryptography]>=3.3.0
+python-multipart>=0.0.9
+
+# Database
+supabase>=2.4.0
+
+# Embeddings (local, no API cost)
+sentence-transformers>=2.7.0
+torch>=2.2.0
+
+# Document parsing
+pypdf>=4.0.0
+nltk>=3.8.1
+
+# Hybrid BM25 search
+rank-bm25>=0.2.2
+numpy>=1.26.0
+
+# HTTP client for OpenRouter
+requests>=2.31.0
+
+# Pydantic
+pydantic[email]>=2.7.0
