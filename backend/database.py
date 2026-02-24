@@ -25,19 +25,29 @@ supabase: Client = get_supabase()
 def create_user(email: str, password: str, name: Optional[str] = None) -> Dict:
     """Register a new user. Raises on duplicate email."""
     # Check if user already exists
-    existing = supabase.table("users").select("id").eq("email", email).execute()
-    if existing.data:
-        raise ValueError("Email already registered")
+    try:
+        existing = supabase.table("users").select("id").eq("email", email).execute()
+        if existing.data:
+            raise ValueError("Email already registered")
+    except Exception as e:
+        logger.error(f"Error checking existing user: {e}")
+        raise RuntimeError(f"Database error: {str(e)}")
 
     hashed = hash_password(password)
-    result = supabase.table("users").insert({
-        "email": email,
-        "password_hash": hashed,
-        "name": name or email.split("@")[0],
-    }).execute()
+    try:
+        result = supabase.table("users").insert({
+            "email": email,
+            "password_hash": hashed,
+            "name": name or email.split("@")[0],
+        }).execute()
+    except Exception as e:
+        logger.error(f"Supabase insert error: {e}")
+        # Check for unique constraint violation manually if needed, 
+        # but the select above should catch it.
+        raise RuntimeError(f"Failed to create user: {str(e)}")
 
     if not result.data:
-        raise RuntimeError("Failed to create user")
+        raise RuntimeError("Failed to create user: No data returned")
     return result.data[0]
 
 

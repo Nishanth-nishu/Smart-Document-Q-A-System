@@ -6,6 +6,8 @@ import {
     FileText, MessageSquare, Send, Loader2, User2, Bot, ChevronDown,
     ExternalLink, LogOut, Menu, X, BookOpen, Copy, CheckCheck
 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import * as api from '@/lib/api'
 import type { Document, SourceCitation } from '@/lib/api'
 
@@ -74,8 +76,8 @@ function MessageBubble({ msg }: { msg: Message }) {
             <div className={`flex-1 max-w-[80%] ${isUser ? 'items-end' : 'items-start'} flex flex-col gap-2`}>
                 {/* Bubble */}
                 <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${isUser
-                        ? 'text-white rounded-tr-none'
-                        : 'text-white/85 rounded-tl-none'
+                    ? 'text-white rounded-tr-none'
+                    : 'text-white/85 rounded-tl-none'
                     }`}
                     style={isUser
                         ? { background: 'linear-gradient(135deg, #4057f0, #5065e8)' }
@@ -86,7 +88,31 @@ function MessageBubble({ msg }: { msg: Message }) {
                             <Loader2 className="w-4 h-4 animate-spin" />
                             <span className="text-xs">Searching documents...</span>
                         </div>
-                    ) : msg.content}
+                    ) : (
+                        <div className="markdown-content">
+                            <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                    ul: ({ children }) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
+                                    ol: ({ children }) => <ol className="list-decimal ml-4 mb-2">{children}</ol>,
+                                    li: ({ children }) => <li className="mb-1">{children}</li>,
+                                    code: ({ node, ...props }) => (
+                                        <code className="bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono" {...props}>
+                                            {props.children}
+                                        </code>
+                                    ),
+                                    pre: ({ node, ...props }) => (
+                                        <pre className="bg-white/5 p-3 rounded-xl overflow-x-auto text-xs font-mono my-2 border border-white/10" {...props}>
+                                            {props.children}
+                                        </pre>
+                                    )
+                                }}
+                            >
+                                {msg.content}
+                            </ReactMarkdown>
+                        </div>
+                    )}
                 </div>
 
                 {/* Copy button for assistant messages */}

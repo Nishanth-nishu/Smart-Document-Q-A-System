@@ -9,7 +9,14 @@ class Settings:
     SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
     SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
-    # OpenRouter LLM
+    # LLM Provider: "gemini" (default) or "openrouter"
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini")
+
+    # Google Gemini (default provider — free tier available)
+    GEMINI_API_KEY: str = os.getenv("GOOGLE_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+
+    # OpenRouter LLM (fallback provider)
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
     OPENROUTER_MODEL: str = os.getenv(
         "OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free"

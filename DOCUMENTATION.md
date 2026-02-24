@@ -16,7 +16,7 @@
 | **Database** | Supabase (PostgreSQL) | Built-in pgvector, Auth, Storage — one platform for all data needs |
 | **Vector store** | Supabase pgvector | No separate vector DB needed; RLS handles per-user isolation natively |
 | **Embeddings** | sentence-transformers/all-MiniLM-L6-v2 | Free, local, 384-dim, fast enough for Render free tier (512MB RAM) |
-| **LLM** | OpenRouter → Llama 3.1 8B Instruct (free) | Zero cost, strong instruction following, fits prototype constraints |
+| **LLM** | Google Gemini (default) / OpenRouter (fallback) | Gemini `gemini-3-flash-preview` free tier is reliable with no rate limits; OpenRouter kept as alternative |
 | **Deployment** | Render (backend) + Vercel (frontend) | Both have free tiers, GitHub integration, zero DevOps overhead |
 
 ### Why not Ollama (original stack)?
@@ -26,7 +26,7 @@ The original template used Ollama for local LLM inference — this works locally
 2. Render free tier has 512MB RAM — can't hold an on-device LLM
 3. Ollama expects a GPU; cloud free tiers are CPU-only
 
-**Solution**: OpenRouter provides a free API to hosted models. `meta-llama/llama-3.1-8b-instruct:free` gives comparable quality at zero cost.
+**Solution**: Multi-provider LLM integration. Google Gemini (`gemini-3-flash-preview`) is the default — free tier, reliable, no rate limits. OpenRouter is kept as a fallback (switchable via `LLM_PROVIDER=openrouter` in `.env`).
 
 ### Why not Chainlit?
 
@@ -130,7 +130,7 @@ Query
   │
   └── Build context: window_text of top-4 chunks
   │
-  └── OpenRouter LLM prompt → answer with [Source N] citations
+   └── LLM prompt (Gemini or OpenRouter) → answer with [Source N] citations
 ```
 
 ### Embedding model choice:

@@ -19,6 +19,7 @@ import logging
 import nltk
 import requests
 import numpy as np
+import time
 from typing import List, Dict, Any, Optional, Tuple
 from sentence_transformers import SentenceTransformer
 from rank_bm25 import BM25Okapi
@@ -294,7 +295,7 @@ def hybrid_search(
     return results
 
 
-# ── LLM Generation via OpenRouter ─────────────────────────────────────────────
+# ── LLM Generation ────────────────────────────────────────────────────────────
 
 def build_rag_prompt(question: str, context_chunks: List[Dict]) -> str:
     """Build a structured RAG prompt with numbered source references."""
@@ -322,7 +323,10 @@ Answer:"""
 
 
 def call_openrouter_llm(prompt: str) -> str:
-    """Call OpenRouter API with the free LLM."""
+    """
+    Call OpenRouter API with the free LLM.
+    Includes retry logic with exponential backoff for 429 (Rate Limit) errors.
+    """
     headers = {
         "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -333,24 +337,112 @@ def call_openrouter_llm(prompt: str) -> str:
         "model": settings.OPENROUTER_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024,
-        "temperature": 0.1,  # Low temp for factual RAG
+        "temperature": 0.1,
     }
 
+    max_retries = 3
+    base_delay = 2  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                f"{settings.OPENROUTER_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60,
+            )
+            
+            # Handle rate limiting specifically
+            if response.status_code == 429:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning(f"Rate limited by OpenRouter. Retrying in {delay}s... (Attempt {attempt+1}/{max_retries})")
+                    time.sleep(delay)
+                    continue
+                else:
+                    logger.error("OpenRouter rate limit exceeded after max retries.")
+                    raise RuntimeError("AI service is busy (rate limited). Please try again in a minute.")
+
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                logger.warning(f"OpenRouter timeout. Retrying... (Attempt {attempt+1}/{max_retries})")
+                continue
+            return "The AI took too long to respond. Please try again."
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 429: # Handled above, but just in case
+                raise RuntimeError("AI service rate limit reached. Please wait a moment.")
+            logger.error(f"OpenRouter HTTP error: {e}")
+            raise RuntimeError(f"AI service error: {response.text}")
+        except Exception as e:
+            logger.error(f"OpenRouter unexpected error: {e}")
+            raise RuntimeError(f"LLM call failed: {str(e)}")
+    
+    return "Failed to get an answer after multiple attempts."
+
+
+def call_gemini_llm(prompt: str) -> str:
+    """
+    Call Google Gemini API using the google-genai SDK.
+    Free tier available for gemini-3-flash-preview.
+    """
     try:
-        response = requests.post(
-            f"{settings.OPENROUTER_BASE_URL}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60,
+        from google import genai
+
+        api_key = settings.GEMINI_API_KEY
+        if not api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. Please add it to your .env file."
+            )
+
+        client = genai.Client(api_key=api_key)
+
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
         )
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
-    except requests.exceptions.Timeout:
-        return "The LLM took too long to respond. Please try again."
+
+        if response.text:
+            return response.text.strip()
+        else:
+            return "The AI model returned an empty response. Please try again."
+
+    except ImportError:
+        raise RuntimeError(
+            "google-genai package not installed. Run: pip install google-genai"
+        )
     except Exception as e:
-        logger.error(f"OpenRouter API error: {e}")
-        raise RuntimeError(f"LLM call failed: {str(e)}")
+        error_msg = str(e)
+        logger.error(f"Gemini API error: {error_msg}")
+        if "API_KEY" in error_msg.upper() or "401" in error_msg or "403" in error_msg:
+            raise RuntimeError(
+                "Invalid Gemini API key. Please check your GEMINI_API_KEY in .env"
+            )
+        if "429" in error_msg or "rate" in error_msg.lower():
+            raise RuntimeError(
+                "Gemini API rate limit reached. Please try again in a moment."
+            )
+        raise RuntimeError(f"LLM call failed: {error_msg}")
+
+
+def call_llm(prompt: str) -> str:
+    """
+    Route LLM calls to the configured provider.
+    Provider is set via LLM_PROVIDER env var (default: "gemini").
+    """
+    provider = settings.LLM_PROVIDER.lower().strip()
+    logger.info(f"Using LLM provider: {provider}")
+
+    if provider == "gemini":
+        return call_gemini_llm(prompt)
+    elif provider == "openrouter":
+        return call_openrouter_llm(prompt)
+    else:
+        logger.warning(f"Unknown LLM provider '{provider}', falling back to Gemini")
+        return call_gemini_llm(prompt)
 
 
 # ── Full RAG Q&A Pipeline ─────────────────────────────────────────────────────
@@ -389,7 +481,7 @@ def answer_question(
 
     # Step 3: Build prompt and call LLM
     prompt = build_rag_prompt(question, retrieved_chunks)
-    answer = call_openrouter_llm(prompt)
+    answer = call_llm(prompt)
 
     # Step 4: Build source citations
     sources = []
